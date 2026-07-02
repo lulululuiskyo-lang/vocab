@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0a0a0a">
+  <title>生词刷刷</title>
+  <style>
+    *, *::before, *::after {
+      margin: 0; padding: 0; box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+    :root {
+      --bg: #0a0a0a;
+      --card: #141414;
+      --card-border: #1f1f1f;
+      --card-revealed: #0e1520;
+      --card-revealed-border: #1a2d4a;
+      --text: #f0f0f0;
+      --reading: #7eb8f7;
+      --memo: #666;
+      --divider: #1e2a3a;
+      --hint: #333;
+      --stat-label: #3a3a3a;
+      --stat-val: #666;
+    }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif;
+      height: 100dvh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    #loading, #error-screen {
+      display: flex; flex-direction: column;
+      align-items: center; gap: 14px;
+      color: #555; font-size: 14px;
+    }
+    #error-screen { display: none; text-align: center; padding: 0 32px; }
+    .spinner {
+      width: 28px; height: 28px;
+      border: 2px solid #1e1e1e; border-top-color: #555;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .retry-btn {
+      margin-top: 8px; background: #1a1a1a; border: 1px solid #2a2a2a;
+      color: #777; padding: 8px 24px; border-radius: 20px;
+      cursor: pointer; font-size: 13px;
+    }
+
+    #app {
+      display: none; width: 100%; height: 100dvh;
+      flex-direction: column; align-items: center; justify-content: center;
+      position: relative;
+    }
+
+    #top-bar {
+      position: absolute; top: 0; left: 0; right: 0;
+      padding: 16px 18px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .top-icon-btn {
+      background: none; border: none; color: #383838; font-size: 18px;
+      cursor: pointer; padding: 6px; line-height: 1;
+      transition: color 0.2s; border-radius: 8px;
+    }
+    .top-icon-btn:hover { color: #888; }
+
+    #stats { display: flex; gap: 16px; align-items: center; }
+    .stat { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .stat-label { font-size: 9px; letter-spacing: 1px; color: var(--stat-label); text-transform: uppercase; }
+    .stat-val { font-size: 15px; font-weight: 600; color: var(--stat-val); font-variant-numeric: tabular-nums; }
+    .stat-val.highlight { color: #5b8adf; }
+
+    #unfamiliar-btn {
+      background: none; border: 1px solid #1e1e1e;
+      color: #444; font-size: 12px;
+      padding: 6px 12px; border-radius: 20px;
+      cursor: pointer; transition: all 0.2s; white-space: nowrap;
+    }
+    #unfamiliar-btn:hover { border-color: #2a2a2a; color: #888; }
+    #unfamiliar-count-badge {
+      display: inline-block; background: #1a2d4a; color: #5b8adf;
+      font-size: 11px; font-weight: 600;
+      padding: 0 6px; border-radius: 10px; margin-left: 4px;
+    }
+
+    #card-container {
+      width: min(360px, 88vw);
+      min-height: min(420px, 65vh);
+      cursor: pointer; position: relative;
+    }
+    #card {
+      width: 100%; border-radius: 22px;
+      border: 1px solid var(--card-border);
+      background: var(--card);
+      padding: 40px 28px 32px;
+      display: flex; flex-direction: column; align-items: center;
+      transition: background 0.35s, border-color 0.35s;
+      min-height: min(420px, 65vh); position: relative;
+    }
+    #card.revealed { background: var(--card-revealed); border-color: var(--card-revealed-border); }
+
+    .word-area { flex: 1; display: flex; align-items: center; justify-content: center; width: 100%; }
+    #word-text {
+      font-size: clamp(28px, 9vw, 52px); font-weight: 600;
+      letter-spacing: 3px; text-align: center; line-height: 1.25;
+    }
+
+    #hint-label {
+      font-size: 11px; color: var(--hint);
+      letter-spacing: 1.5px; text-transform: uppercase;
+      position: absolute; bottom: 22px; transition: opacity 0.2s;
+    }
+
+    #reveal-content {
+      width: 100%; display: flex; flex-direction: column;
+      align-items: center; gap: 14px;
+      opacity: 0; transform: translateY(10px);
+      pointer-events: none;
+      transition: opacity 0.3s ease, transform 0.3s ease;
+      overflow: hidden; max-height: 0;
+    }
+    #reveal-content.visible {
+      opacity: 1; transform: translateY(0);
+      pointer-events: auto; max-height: 400px;
+    }
+    .reveal-divider { width: 36px; height: 1px; background: var(--divider); margin: 4px 0; flex-shrink: 0; }
+    #reading-text {
+      font-size: clamp(20px, 6vw, 30px); font-weight: 500;
+      color: var(--reading); text-align: center; letter-spacing: 1px; line-height: 1.5;
+    }
+    #memo-text {
+      font-size: clamp(12px, 3.5vw, 14px); color: var(--memo);
+      text-align: center; line-height: 1.8; width: 100%;
+      max-height: 120px; overflow-y: auto;
+    }
+    #memo-text:empty { display: none; }
+
+    #action-btns { display: flex; gap: 10px; margin-top: 8px; width: 100%; justify-content: center; }
+    .action-btn {
+      flex: 1; max-width: 140px; padding: 10px 0; border-radius: 12px;
+      font-size: 13px; font-weight: 500; cursor: pointer;
+      transition: all 0.2s; border: 1px solid; letter-spacing: 0.5px;
+    }
+    #familiar-btn { background: #0a1a0a; border-color: #1a3a1a; color: #4a9a5a; }
+    #familiar-btn:hover { background: #0f2a0f; border-color: #2a5a2a; }
+    #familiar-btn.marked { background: #0a1a0a; border-color: #2a5a2a; color: #6ab87a; opacity: 0.7; }
+    #next-btn { background: #0d1520; border-color: #1e2f50; color: #5b8adf; }
+    #next-btn:hover { background: #121e30; border-color: #2a4a80; }
+
+    #bottom-bar {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      display: flex; flex-direction: column; align-items: center;
+      gap: 12px; padding-bottom: 24px;
+    }
+    #shuffle-btn {
+      background: #111; border: 1px solid #1e1e1e; color: #444;
+      font-size: 12px; letter-spacing: 1px; padding: 7px 22px;
+      border-radius: 20px; cursor: pointer; transition: all 0.2s;
+    }
+    #shuffle-btn:hover { color: #888; border-color: #2a2a2a; }
+    #progress { width: 100%; height: 2px; background: #181818; }
+    #progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #1e3a6a, #4a7acc);
+      transition: width 0.3s ease;
+    }
+
+    @keyframes outUp   { to   { transform: translateY(-44px); opacity: 0; } }
+    @keyframes inBelow { from { transform: translateY(44px);  opacity: 0; } }
+    @keyframes outDown { to   { transform: translateY(44px);  opacity: 0; } }
+    @keyframes inAbove { from { transform: translateY(-44px); opacity: 0; } }
+    .anim-out-up    { animation: outUp   0.2s ease forwards; }
+    .anim-in-below  { animation: inBelow 0.2s ease forwards; }
+    .anim-out-down  { animation: outDown 0.2s ease forwards; }
+    .anim-in-above  { animation: inAbove 0.2s ease forwards; }
+
+    #unfamiliar-panel {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+      z-index: 100; display: flex; align-items: flex-end;
+      opacity: 0; pointer-events: none; transition: opacity 0.25s;
+    }
+    #unfamiliar-panel.open { opacity: 1; pointer-events: auto; }
+    #panel-sheet {
+      width: 100%; background: #111;
+      border-radius: 20px 20px 0 0; border-top: 1px solid #222;
+      padding: 0 0 40px; max-height: 80dvh;
+      display: flex; flex-direction: column;
+      transform: translateY(100%);
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    #unfamiliar-panel.open #panel-sheet { transform: translateY(0); }
+    #panel-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 20px 20px 14px; border-bottom: 1px solid #1a1a1a; flex-shrink: 0;
+    }
+    #panel-title { font-size: 15px; font-weight: 600; color: #ccc; letter-spacing: 0.5px; }
+    #panel-close { background: none; border: none; color: #444; font-size: 20px; cursor: pointer; line-height: 1; padding: 4px; }
+    #panel-close:hover { color: #888; }
+    #unfamiliar-list { flex: 1; overflow-y: auto; padding: 8px 0; }
+    .unfamiliar-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 13px 20px; border-bottom: 1px solid #161616;
+    }
+    .unfamiliar-item:last-child { border-bottom: none; }
+    .ui-word { font-size: 16px; font-weight: 500; color: #ddd; letter-spacing: 1px; }
+    .ui-reading { font-size: 13px; color: #5b8adf; margin-left: 12px; text-align: right; flex-shrink: 0; max-width: 55%; }
+    .empty-hint { text-align: center; padding: 40px 20px; color: #333; font-size: 14px; }
+    #panel-footer { padding: 16px 20px 0; flex-shrink: 0; }
+    #clear-btn {
+      width: 100%; background: #1a0a0a; border: 1px solid #3a1a1a;
+      color: #884444; font-size: 13px; padding: 12px; border-radius: 12px;
+      cursor: pointer; transition: all 0.2s; letter-spacing: 0.5px;
+    }
+    #clear-btn:hover { background: #2a1010; border-color: #5a2222; color: #cc6666; }
+  </style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <span>加载生词本…</span>
+</div>
+
+<div id="error-screen">
+  <span style="color:#884444">⚠ 加载失败</span>
+  <span style="font-size:12px;color:#333;margin-top:4px">请确认 Google Sheet 已设为「任何人可查看」</span>
+  <button class="retry-btn" onclick="init(true)">重试</button>
+</div>
+
+<div id="app">
+  <div id="top-bar">
+    <button class="top-icon-btn" id="refresh-btn" title="拉取最新数据">↺</button>
+    <div id="stats">
+      <div class="stat">
+        <span class="stat-label">全部</span>
+        <span class="stat-val" id="stat-total">0</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">已复习</span>
+        <span class="stat-val" id="stat-reviewed">0</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">不熟悉</span>
+        <span class="stat-val highlight" id="stat-unfamiliar">0</span>
+      </div>
+    </div>
+    <button id="unfamiliar-btn" onclick="openPanel()">
+      不熟悉 <span id="unfamiliar-count-badge">0</span>
+    </button>
+  </div>
+
+  <div id="card-container">
+    <div id="card">
+      <div class="word-area">
+        <div id="word-text"></div>
+      </div>
+      <div id="reveal-content">
+        <div class="reveal-divider"></div>
+        <div id="reading-text"></div>
+        <div id="memo-text"></div>
+        <div id="action-btns">
+          <button class="action-btn" id="familiar-btn">认识 ✓</button>
+          <button class="action-btn" id="next-btn">下一张 →</button>
+        </div>
+      </div>
+      <span id="hint-label">点击查看含义</span>
+    </div>
+  </div>
+
+  <div id="bottom-bar">
+    <button id="shuffle-btn">重新洗牌</button>
+    <div id="progress"><div id="progress-fill"></div></div>
+  </div>
+</div>
+
+<div id="unfamiliar-panel">
+  <div id="panel-sheet">
+    <div id="panel-header">
+      <span id="panel-title">不熟悉单词</span>
+      <button id="panel-close" onclick="closePanel()">×</button>
+    </div>
+    <div id="unfamiliar-list"></div>
+    <div id="panel-footer">
+      <button id="clear-btn" onclick="clearUnfamiliar()">清空全部不熟悉</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const SHEET_ID  = '1AiRkfFmq3NGgu8Ixvf_m-A5y_GjUmX0-cYsNENcO8oo';
+  const CSV_URL   = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
+  const CACHE_KEY = 'vocab_v2_cards';
+  const CACHE_TS  = 'vocab_v2_ts';
+  const UNFAM_KEY = 'vocab_v2_unfamiliar';
+  const SEEN_KEY  = 'vocab_v2_seen';      // 跨会话持久化：见过的词
+  const CACHE_TTL = 30 * 60 * 1000;
+
+  let cards    = [];
+  let allCards = [];
+  let idx      = 0;
+  let revealed = false;
+  let busy     = false;
+  let reviewedSession = new Set();
+  let unfamiliarSet   = new Set(JSON.parse(localStorage.getItem(UNFAM_KEY) || '[]'));
+  let seenSet         = new Set(JSON.parse(localStorage.getItem(SEEN_KEY)  || '[]'));
+
+  function saveUnfamiliar() { localStorage.setItem(UNFAM_KEY, JSON.stringify([...unfamiliarSet])); }
+  function saveSeen()       { localStorage.setItem(SEEN_KEY,  JSON.stringify([...seenSet])); }
+
+  // ── 权重排序：未见过(5) > 不熟悉(3) > 见过未点(1) ──
+  // 实现方式：把三组词分别 shuffle 后按 5:3:1 交叉编排
+  function weightedShuffle(arr) {
+    const unseen     = shuffle(arr.filter(c => !seenSet.has(c.word)));
+    const unfamiliar = shuffle(arr.filter(c =>  seenSet.has(c.word) && unfamiliarSet.has(c.word)));
+    const familiar   = shuffle(arr.filter(c =>  seenSet.has(c.word) && !unfamiliarSet.has(c.word)));
+
+    const result = [];
+    let ui = 0, ni = 0, fi = 0;
+    while (ui < unseen.length || ni < unfamiliar.length || fi < familiar.length) {
+      for (let i = 0; i < 5 && ui < unseen.length;     i++) result.push(unseen[ui++]);
+      for (let i = 0; i < 3 && ni < unfamiliar.length; i++) result.push(unfamiliar[ni++]);
+      for (let i = 0; i < 1 && fi < familiar.length;   i++) result.push(familiar[fi++]);
+    }
+    return result;
+  }
+
+  function shuffle(arr) {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  function updateStats() {
+    document.getElementById('stat-total').textContent         = allCards.length;
+    document.getElementById('stat-reviewed').textContent      = reviewedSession.size;
+    document.getElementById('stat-unfamiliar').textContent    = unfamiliarSet.size;
+    document.getElementById('unfamiliar-count-badge').textContent = unfamiliarSet.size;
+  }
+
+  async function fetchCards(force = false) {
+    if (!force) {
+      const cached = localStorage.getItem(CACHE_KEY);
+      const ts     = localStorage.getItem(CACHE_TS);
+      if (cached && ts && Date.now() - +ts < CACHE_TTL) return JSON.parse(cached);
+    }
+    const res = await fetch(CSV_URL);
+    if (!res.ok) throw new Error(res.status);
+    const parsed = parseCSV(await res.text());
+    localStorage.setItem(CACHE_KEY, JSON.stringify(parsed));
+    localStorage.setItem(CACHE_TS, Date.now());
+    return parsed;
+  }
+
+  function parseCSV(text) {
+    const HEADERS = ['单词','word','vocab','词','term'];
+    return text.trim().split('\n').map(line => {
+      const cols = []; let cur = '', inQ = false;
+      for (const ch of line) {
+        if (ch === '"') { inQ = !inQ; }
+        else if (ch === ',' && !inQ) { cols.push(cur.trim()); cur = ''; }
+        else cur += ch;
+      }
+      cols.push(cur.trim());
+      return { word: cols[0]||'', reading: cols[1]||'', memo: cols[2]||'' };
+    }).filter(r => r.word && !HEADERS.includes(r.word.toLowerCase()));
+  }
+
+  function render() {
+    const c = cards[idx];
+    document.getElementById('word-text').textContent     = c.word;
+    document.getElementById('reading-text').textContent  = c.reading;
+    document.getElementById('memo-text').textContent     = c.memo;
+    document.getElementById('progress-fill').style.width = `${((idx+1)/cards.length)*100}%`;
+    // 出现即计入"见过"和"已复习"
+    seenSet.add(c.word);
+    saveSeen();
+    reviewedSession.add(c.word);
+    setRevealed(false);
+    updateStats();
+  }
+
+  function setRevealed(val) {
+    revealed = val;
+    const card     = document.getElementById('card');
+    const revealEl = document.getElementById('reveal-content');
+    const hintEl   = document.getElementById('hint-label');
+    const famBtn   = document.getElementById('familiar-btn');
+    if (val) {
+      card.classList.add('revealed');
+      revealEl.classList.add('visible');
+      hintEl.style.opacity = '0';
+      hintEl.style.pointerEvents = 'none';
+      const isMarked = !unfamiliarSet.has(cards[idx].word);
+      famBtn.textContent = isMarked ? '已标记认识' : '认识 ✓';
+      famBtn.classList.toggle('marked', isMarked);
+      famBtn.disabled = isMarked;
+    } else {
+      card.classList.remove('revealed');
+      revealEl.classList.remove('visible');
+      hintEl.style.opacity = '1';
+      hintEl.style.pointerEvents = '';
+      famBtn.disabled = false;
+      famBtn.classList.remove('marked');
+      famBtn.textContent = '认识 ✓';
+    }
+  }
+
+  function revealCard() {
+    if (revealed || busy) return;
+    const c = cards[idx];
+    unfamiliarSet.add(c.word);
+    saveUnfamiliar();
+    setRevealed(true);
+    updateStats();
+  }
+
+  function go(dir) {
+    if (busy) return;
+    if (dir === 'prev' && idx === 0) return;
+    busy = true;
+    const container = document.getElementById('card-container');
+    const [outCls, inCls] = dir === 'next'
+      ? ['anim-out-up', 'anim-in-below']
+      : ['anim-out-down', 'anim-in-above'];
+
+    container.classList.add(outCls);
+    setTimeout(() => {
+      if (dir === 'next') {
+        if (idx + 1 >= cards.length) {
+          // 刷完一轮，按最新权重重新编排
+          cards = weightedShuffle(allCards);
+          idx = 0;
+        } else {
+          idx++;
+        }
+      } else {
+        idx--;
+      }
+      render();
+      container.classList.remove(outCls);
+      container.classList.add(inCls);
+      setTimeout(() => { container.classList.remove(inCls); busy = false; }, 200);
+    }, 200);
+  }
+
+  // ── 交互 ──
+  document.getElementById('card').addEventListener('click', () => {
+    if (busy) return;
+    if (!revealed) revealCard();
+  });
+
+  document.getElementById('familiar-btn').addEventListener('click', e => {
+    e.stopPropagation();
+    unfamiliarSet.delete(cards[idx].word);
+    saveUnfamiliar();
+    updateStats();
+    const btn = document.getElementById('familiar-btn');
+    btn.textContent = '已标记认识';
+    btn.classList.add('marked');
+    btn.disabled = true;
+  });
+
+  document.getElementById('next-btn').addEventListener('click', e => {
+    e.stopPropagation();
+    go('next');
+  });
+
+  // 触摸滑动
+  let ty0 = 0, tx0 = 0, moved = false;
+  const cc = document.getElementById('card-container');
+  cc.addEventListener('touchstart', e => {
+    ty0 = e.touches[0].clientY; tx0 = e.touches[0].clientX; moved = false;
+  }, { passive: true });
+  cc.addEventListener('touchmove', e => {
+    if (Math.abs(ty0 - e.touches[0].clientY) > 10 || Math.abs(tx0 - e.touches[0].clientX) > 10) moved = true;
+  }, { passive: true });
+  cc.addEventListener('touchend', e => {
+    if (!moved) return;
+    const dy = ty0 - e.changedTouches[0].clientY;
+    const dx = tx0 - e.changedTouches[0].clientX;
+    if (Math.abs(dy) >= Math.abs(dx)) {
+      if (dy > 30)  go('next');
+      if (dy < -30) go('prev');
+    }
+  }, { passive: true });
+
+  // 键盘：只有 Enter 展示含义
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (!revealed) revealCard(); else go('next');
+    }
+    if ([' ', 'ArrowRight', 'ArrowDown'].includes(e.key)) { e.preventDefault(); go('next'); }
+    if (['ArrowLeft', 'ArrowUp'].includes(e.key))         { e.preventDefault(); go('prev'); }
+  });
+
+  document.getElementById('shuffle-btn').addEventListener('click', () => {
+    cards = weightedShuffle(allCards);
+    idx = 0;
+    reviewedSession.clear();
+    render();
+  });
+  document.getElementById('refresh-btn').addEventListener('click', () => init(true));
+
+  // ── 不熟悉面板 ──
+  function openPanel() {
+    const listEl = document.getElementById('unfamiliar-list');
+    listEl.innerHTML = '';
+    const list = allCards.filter(c => unfamiliarSet.has(c.word));
+    if (list.length === 0) {
+      listEl.innerHTML = '<div class="empty-hint">还没有不熟悉的单词 ☁</div>';
+    } else {
+      list.forEach(c => {
+        const item = document.createElement('div');
+        item.className = 'unfamiliar-item';
+        item.innerHTML = `<span class="ui-word">${c.word}</span><span class="ui-reading">${c.reading}</span>`;
+        listEl.appendChild(item);
+      });
+    }
+    document.getElementById('unfamiliar-panel').classList.add('open');
+  }
+  function closePanel() { document.getElementById('unfamiliar-panel').classList.remove('open'); }
+  function clearUnfamiliar() {
+    if (!confirm('确认清空所有不熟悉单词？')) return;
+    unfamiliarSet.clear();
+    saveUnfamiliar();
+    updateStats();
+    closePanel();
+  }
+  document.getElementById('unfamiliar-panel').addEventListener('click', e => {
+    if (e.target === document.getElementById('unfamiliar-panel')) closePanel();
+  });
+
+  // ── 初始化 ──
+  async function init(force = false) {
+    document.getElementById('error-screen').style.display = 'none';
+    document.getElementById('app').style.display          = 'none';
+    document.getElementById('loading').style.display      = 'flex';
+    try {
+      allCards = await fetchCards(force);
+      cards    = weightedShuffle(allCards);
+      idx      = 0;
+      reviewedSession.clear();
+      render();
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('app').style.display     = 'flex';
+    } catch(e) {
+      document.getElementById('loading').style.display      = 'none';
+      document.getElementById('error-screen').style.display = 'flex';
+    }
+  }
+
+  init();
+</script>
+</body>
+</html>
