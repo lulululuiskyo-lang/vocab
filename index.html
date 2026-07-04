@@ -7,6 +7,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#0a0a0a">
   <title>生词刷刷</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;600&family=Nunito:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after {
       margin: 0; padding: 0; box-sizing: border-box;
@@ -29,7 +31,7 @@
     body {
       background: var(--bg);
       color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif;
+      font-family: 'Nunito', -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
       height: 100dvh;
       overflow: hidden;
       display: flex;
@@ -115,7 +117,8 @@
     .word-area { flex: 1; display: flex; align-items: center; justify-content: center; width: 100%; }
     #word-text {
       font-size: clamp(28px, 9vw, 52px); font-weight: 600;
-      letter-spacing: 3px; text-align: center; line-height: 1.25;
+      font-family: 'Lora', 'Noto Serif SC', Georgia, serif;
+      letter-spacing: 2px; text-align: center; line-height: 1.25;
     }
 
     #hint-label {
@@ -178,14 +181,14 @@
       transition: width 0.3s ease;
     }
 
-    @keyframes outUp   { to   { transform: translateY(-44px); opacity: 0; } }
-    @keyframes inBelow { from { transform: translateY(44px);  opacity: 0; } }
-    @keyframes outDown { to   { transform: translateY(44px);  opacity: 0; } }
-    @keyframes inAbove { from { transform: translateY(-44px); opacity: 0; } }
-    .anim-out-up    { animation: outUp   0.2s ease forwards; }
-    .anim-in-below  { animation: inBelow 0.2s ease forwards; }
-    .anim-out-down  { animation: outDown 0.2s ease forwards; }
-    .anim-in-above  { animation: inAbove 0.2s ease forwards; }
+    @keyframes outUp   { to   { transform: translateY(-20px); opacity: 0; } }
+    @keyframes inBelow { from { transform: translateY(20px);  opacity: 0; } }
+    @keyframes outDown { to   { transform: translateY(20px);  opacity: 0; } }
+    @keyframes inAbove { from { transform: translateY(-20px); opacity: 0; } }
+    .anim-out-up    { animation: outUp   0.1s ease forwards; }
+    .anim-in-below  { animation: inBelow 0.1s ease forwards; }
+    .anim-out-down  { animation: outDown 0.1s ease forwards; }
+    .anim-in-above  { animation: inAbove 0.1s ease forwards; }
 
     #unfamiliar-panel {
       position: fixed; inset: 0; background: rgba(0,0,0,0.7);
@@ -308,18 +311,23 @@
   const SEEN_KEY  = 'vocab_v2_seen';      // 跨会话持久化：见过的词
   const CACHE_TTL = 30 * 60 * 1000;
 
-  // 10种卡片配色：[背景色, 边框色, 强调色（读音/按钮）]
+  // 配色：饱和色 × 6 + 莫兰迪 × 6，随机交替
+  // 格式：[背景色, 边框色, 强调色（读音文字）]
   const PALETTES = [
-    ['#0a1628', '#1a3a6a', '#60a5fa'],  // 深海蓝
-    ['#0f1f0a', '#2a5a1a', '#4ade80'],  // 森林绿
-    ['#1f0a18', '#5a1a4a', '#f472b6'],  // 玫瑰粉
-    ['#1f150a', '#5a3a1a', '#fb923c'],  // 琥珀橙
-    ['#100a1f', '#3a1a5a', '#a78bfa'],  // 暮光紫
-    ['#0a1f1f', '#1a5a5a', '#2dd4bf'],  // 青碧
-    ['#1f0a0a', '#5a1a1a', '#f87171'],  // 暗红
-    ['#131f0a', '#3a5a1a', '#a3e635'],  // 荧光绿
-    ['#0a1a1f', '#1a4a5a', '#38bdf8'],  // 天蓝
-    ['#1f0f0a', '#5a2a1a', '#fdba74'],  // 暖橙
+    // ── 饱和色 ──
+    ['#162d6b', '#2a4d9f', '#93c5fd'],  // 宝蓝
+    ['#14532d', '#166534', '#86efac'],  // 翠绿
+    ['#7f1d1d', '#991b1b', '#fca5a5'],  // 深红
+    ['#78350f', '#92400e', '#fde68a'],  // 琥珀
+    ['#4c1d95', '#5b21b6', '#c4b5fd'],  // 深紫
+    ['#134e4a', '#0f766e', '#5eead4'],  // 深青
+    // ── 莫兰迪 ──
+    ['#6b5a52', '#8a7068', '#f0e6e0'],  // 莫兰迪赭
+    ['#4a6050', '#5a7560', '#d0e8d4'],  // 莫兰迪绿
+    ['#4a5568', '#5a6a80', '#dde6f5'],  // 莫兰迪蓝
+    ['#6b4a5a', '#855a72', '#f0dcea'],  // 莫兰迪粉
+    ['#5a5640', '#706c50', '#e8e4cc'],  // 莫兰迪黄
+    ['#524a62', '#685a7a', '#e2d8f0'],  // 莫兰迪紫
   ];
   let palette = PALETTES[0];
 
@@ -383,17 +391,32 @@
   }
 
   function parseCSV(text) {
-    const HEADERS = ['单词','word','vocab','词','term'];
-    return text.trim().split('\n').map(line => {
-      const cols = []; let cur = '', inQ = false;
-      for (const ch of line) {
-        if (ch === '"') { inQ = !inQ; }
-        else if (ch === ',' && !inQ) { cols.push(cur.trim()); cur = ''; }
-        else cur += ch;
+    const HEADERS = ['单词','词语','word','vocab','词','term','생词'];
+    // 逐字符解析，正确处理单元格内换行（quoted multiline cells）
+    const rows = [];
+    let row = [], field = '', inQ = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (inQ) {
+        if (ch === '"') {
+          if (text[i+1] === '"') { field += '"'; i++; } // "" → 转义引号
+          else inQ = false;
+        } else {
+          field += ch; // 引号内换行原样保留进 field，不拆行
+        }
+      } else {
+        if      (ch === '"')  { inQ = true; }
+        else if (ch === ',')  { row.push(field.trim()); field = ''; }
+        else if (ch === '\r') { /* 忽略 \r */ }
+        else if (ch === '\n') { row.push(field.trim()); rows.push(row); row = []; field = ''; }
+        else                  { field += ch; }
       }
-      cols.push(cur.trim());
-      return { word: cols[0]||'', reading: cols[1]||'', memo: cols[2]||'' };
-    }).filter(r => r.word && !HEADERS.includes(r.word.toLowerCase()));
+    }
+    if (field || row.length) { row.push(field.trim()); rows.push(row); }
+
+    return rows
+      .map(cols => ({ word: cols[0]||'', reading: cols[1]||'', memo: cols[2]||'' }))
+      .filter(r => r.word && !HEADERS.includes(r.word.toLowerCase()));
   }
 
   function applyPalette(p) {
@@ -485,8 +508,8 @@
       render();
       container.classList.remove(outCls);
       container.classList.add(inCls);
-      setTimeout(() => { container.classList.remove(inCls); busy = false; }, 200);
-    }, 200);
+      setTimeout(() => { container.classList.remove(inCls); busy = false; }, 100);
+    }, 100);
   }
 
   // ── 交互 ──
