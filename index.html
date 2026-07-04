@@ -308,6 +308,21 @@
   const SEEN_KEY  = 'vocab_v2_seen';      // 跨会话持久化：见过的词
   const CACHE_TTL = 30 * 60 * 1000;
 
+  // 10种卡片配色：[背景色, 边框色, 强调色（读音/按钮）]
+  const PALETTES = [
+    ['#0a1628', '#1a3a6a', '#60a5fa'],  // 深海蓝
+    ['#0f1f0a', '#2a5a1a', '#4ade80'],  // 森林绿
+    ['#1f0a18', '#5a1a4a', '#f472b6'],  // 玫瑰粉
+    ['#1f150a', '#5a3a1a', '#fb923c'],  // 琥珀橙
+    ['#100a1f', '#3a1a5a', '#a78bfa'],  // 暮光紫
+    ['#0a1f1f', '#1a5a5a', '#2dd4bf'],  // 青碧
+    ['#1f0a0a', '#5a1a1a', '#f87171'],  // 暗红
+    ['#131f0a', '#3a5a1a', '#a3e635'],  // 荧光绿
+    ['#0a1a1f', '#1a4a5a', '#38bdf8'],  // 天蓝
+    ['#1f0f0a', '#5a2a1a', '#fdba74'],  // 暖橙
+  ];
+  let palette = PALETTES[0];
+
   let cards    = [];
   let allCards = [];
   let idx      = 0;
@@ -381,6 +396,18 @@
     }).filter(r => r.word && !HEADERS.includes(r.word.toLowerCase()));
   }
 
+  function applyPalette(p) {
+    const card = document.getElementById('card');
+    card.style.background  = p[0];
+    card.style.borderColor = p[1];
+    document.getElementById('reading-text').style.color       = p[2];
+    document.getElementById('next-btn').style.color           = p[2];
+    document.getElementById('next-btn').style.borderColor     = p[1];
+    document.getElementById('progress-fill').style.background = p[2];
+    document.getElementById('unfamiliar-count-badge').style.background = p[1];
+    document.getElementById('unfamiliar-count-badge').style.color      = p[2];
+  }
+
   function render() {
     const c = cards[idx];
     document.getElementById('word-text').textContent     = c.word;
@@ -391,6 +418,9 @@
     seenSet.add(c.word);
     saveSeen();
     reviewedSession.add(c.word);
+    // 每张卡随机换配色
+    palette = PALETTES[Math.floor(Math.random() * PALETTES.length)];
+    applyPalette(palette);
     setRevealed(false);
     updateStats();
   }
